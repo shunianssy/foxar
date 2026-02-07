@@ -1,0 +1,68 @@
+name: Publish to PyPI
+
+on:
+  push:
+    branches: [main, master]
+    tags:
+      - 'v*'                # 只有打 v 开头的 tag 才发布（如 v0.1.0）
+  pull_request:
+    branches: [main, master]
+
+permissions:
+  contents: read            # 最小权限原则
+
+jobs:
+  test:
+    name: Test on Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install PDM
+        run: pip install pdm
+
+      - name: Install dependencies and your package
+        run: pdm install --prod  # 或 pdm install（如果你有 dev 依赖）
+
+      - name: Run tests (optional)
+        run: |
+          if [ -d "tests" ]; then
+            pdm run pytest
+          else
+            echo "No tests directory, skipping tests."
+          fi
+
+  publish:
+    name: Publish to PyPI
+    if: startsWith(github.ref, 'refs/tags/v')  # 仅当 tag 以 v 开头时触发
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write        # 启用 trusted publishing（无需 API token）
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PDM
+        run: pip install pdm
+
+      - name: Build package
+        run: pdm build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        # 注意：这里使用 OIDC 身份认证，无需 PYPI_API_TOKEN
